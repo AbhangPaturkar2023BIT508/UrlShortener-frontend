@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { notifications } from "@mantine/notifications";
-import { deleteLink, getLinks } from "../services/LinkService";
+import { deleteLink, getLinks } from "../services/LinkService.js";
 
 const Dashboard = () => {
   const user = JSON.parse(localStorage.getItem("user"));
