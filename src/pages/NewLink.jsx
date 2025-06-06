@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Container,
   Title,
@@ -6,113 +6,169 @@ import {
   Button,
   Switch,
   Group,
-  Text,
   Paper,
-  Select,
-  PasswordInput,
   Box,
-  Alert,
+  Stack,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { linkService } from "../services/linkService";
-import { Calendar, Check, Clock, KeyRound, X } from "lucide-react";
-import CryptoJS from "crypto-js";
+import { Check, Clock, X } from "lucide-react";
 import { notifications } from "@mantine/notifications";
+import { checkCodeExists, createLink } from "../services/LinkService";
 
 const NewLink = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  const getTodayDate = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const getCurrentTime = () => new Date().toTimeString().slice(0, 5); // HH:MM
 
   const form = useForm({
     initialValues: {
       originalUrl: "",
       customCode: "",
       useExpiry: false,
-      expiryDuration: "30",
-      useEncryption: false,
-      encryptionKey: "",
+      notifyBeforeExpiry: false,
+      expiryDate: "",
+      expiryTime: "",
+      scheduled: false,
+      activationDate: "",
+      activationTime: "",
     },
+
     validate: {
       originalUrl: (value) => {
         try {
           new URL(value);
           return null;
-        } catch (e) {
+        } catch {
           return "Please enter a valid URL";
         }
       },
       customCode: (value) => {
         if (value && !/^[a-zA-Z0-9-_]{3,16}$/.test(value)) {
-          return "Custom code must be 3-16 alphanumeric characters";
+          return "Custom code must be 3–16 alphanumeric characters";
         }
         return null;
       },
-      encryptionKey: (value, values) => {
-        if (values.useEncryption && (!value || value.length < 6)) {
-          return "Encryption key must be at least 6 characters";
+      activationDate: (value, values) => {
+        if (values.scheduled && !value) return "Please select a date";
+        return null;
+      },
+      activationTime: (value, values) => {
+        if (values.scheduled) {
+          if (!value) return "Please select a time";
+          if (
+            values.activationDate === getTodayDate() &&
+            value < getCurrentTime()
+          ) {
+            return "Time must be in the future for today";
+          }
         }
+        return null;
+      },
+      expiryDate: (value, values) => {
+        if (values.useExpiry && !value) return "Please select expiry date";
+        return null;
+      },
+      expiryTime: (value, values) => {
+        if (values.useExpiry && !value) return "Please select expiry time";
+
+        if (values.useExpiry) {
+          const activation = values.scheduled
+            ? new Date(`${values.activationDate}T${values.activationTime}`)
+            : new Date();
+          const expiry = new Date(`${values.expiryDate}T${values.expiryTime}`);
+          if (expiry <= activation) {
+            return "Expiry must be after activation time";
+          }
+        }
+
         return null;
       },
     },
   });
 
+  useEffect(() => {
+    if (form.values.useExpiry) {
+      form.validateField("expiryTime");
+    }
+  }, [
+    form.values.expiryDate,
+    form.values.expiryTime,
+    form.values.activationDate,
+    form.values.activationTime,
+    form.values.useExpiry,
+    form.values.scheduled,
+  ]);
+
+  const getLocalISOString = (dateStr, timeStr) => {
+    return `${dateStr}T${timeStr}:00`; // No conversion to UTC
+  };
+
   const handleSubmit = async (values) => {
-    if (!user) return;
+    setLoading(true);
 
     try {
-      setLoading(true);
-
-      let finalUrl = values.originalUrl;
-      let expiresAt;
-
-      if (values.useExpiry) {
-        const days = parseInt(values.expiryDuration);
-        const date = new Date();
-        date.setDate(date.getDate() + days);
-        expiresAt = date.toISOString();
+      if (values.customCode) {
+        const isAvailable = await checkCodeExists(values.customCode);
+        if (isAvailable) {
+          notifications.show({
+            title: "Custom code already used",
+            message: `"${values.customCode}" is already taken.`,
+            color: "red",
+          });
+          setLoading(false);
+          return;
+        }
       }
 
-      if (values.useEncryption) {
-        finalUrl = linkService.encryptUrl(
-          values.originalUrl,
-          values.encryptionKey
+      const user = JSON.parse(localStorage.getItem("user"));
+      const userId = user?.id;
+
+      // Always set createdAt to now
+      const createdAt = new Date().toISOString();
+
+      let activateAt = null;
+      if (values.scheduled && values.activationDate && values.activationTime) {
+        activateAt = getLocalISOString(
+          values.activationDate,
+          values.activationTime
         );
       }
 
-      await linkService.createLink(
-        user.id,
-        finalUrl,
-        values.customCode || undefined,
+      let expiresAt = null;
+      if (values.useExpiry && values.expiryDate && values.expiryTime) {
+        expiresAt = getLocalISOString(values.expiryDate, values.expiryTime);
+      }
+      await createLink({
+        originalUrl: values.originalUrl,
+        customCode: values.customCode || undefined,
+        createdAt,
+        activateAt,
         expiresAt,
-        values.useEncryption,
-        values.useEncryption ? values.encryptionKey : undefined
-      );
+        notifyOn:
+          Boolean(values.useExpiry) && Boolean(values.notifyBeforeExpiry),
+        userId,
+      });
 
       notifications.show({
-        title: "Link created successfully",
-        message: "Your shortened link is ready to use",
+        title: "Link Created",
+        message: "Your shortened link is ready!",
         color: "green",
       });
 
       navigate("/");
     } catch (error) {
-      console.error("Error creating link:", error);
+      console.error("Link creation error:", error);
       notifications.show({
         title: "Error",
-        message: "Failed to create link. Please try again.",
+        message: "Something went wrong. Try again.",
         color: "red",
       });
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateRandomKey = () => {
-    const randomKey = CryptoJS.lib.WordArray.random(16).toString();
-    form.setFieldValue("encryptionKey", randomKey.slice(0, 12));
   };
 
   return (
@@ -125,26 +181,26 @@ const NewLink = () => {
         <form onSubmit={form.onSubmit(handleSubmit)}>
           <TextInput
             label="URL to Shorten"
-            placeholder="https://example.com/your-long-url"
+            placeholder="https://example.com"
             required
             mb="md"
             {...form.getInputProps("originalUrl")}
           />
 
           <TextInput
-            label="Custom Short Code (Optional)"
-            description="Leave blank to generate automatically"
+            label="Custom Code (Optional)"
             placeholder="e.g., my-link"
             mb="xl"
             {...form.getInputProps("customCode")}
           />
 
-          <Group mb="xl">
+          {/* Scheduled Activation */}
+          <Stack mb="xl">
             <Switch
-              label="Set Expiry Date"
-              checked={form.values.useExpiry}
-              onChange={(event) =>
-                form.setFieldValue("useExpiry", event.currentTarget.checked)
+              label="Schedule Link Activation"
+              checked={form.values.scheduled}
+              onChange={(e) =>
+                form.setFieldValue("scheduled", e.currentTarget.checked)
               }
               size="md"
               color="blue"
@@ -152,64 +208,87 @@ const NewLink = () => {
               offLabel={<X size={14} />}
             />
 
-            {form.values.useExpiry && (
-              <Box ml="md" style={{ flexGrow: 1 }}>
-                <Select
-                  label="Expires After"
-                  data={[
-                    { value: "1", label: "1 day" },
-                    { value: "7", label: "7 days" },
-                    { value: "30", label: "30 days" },
-                    { value: "90", label: "90 days" },
-                    { value: "365", label: "1 year" },
-                  ]}
-                  leftSection={<Clock size={16} />}
-                  {...form.getInputProps("expiryDuration")}
+            {form.values.scheduled && (
+              <>
+                <TextInput
+                  type="date"
+                  label="Activation Date"
+                  {...form.getInputProps("activationDate")}
+                  min={getTodayDate()}
+                  required
                 />
-              </Box>
-            )}
-          </Group>
 
-          <Group mb="xl">
+                <TextInput
+                  type="time"
+                  label="Activation Time"
+                  {...form.getInputProps("activationTime")}
+                  min={
+                    form.values.activationDate === getTodayDate()
+                      ? getCurrentTime()
+                      : undefined
+                  }
+                  required
+                />
+              </>
+            )}
+          </Stack>
+
+          {/* Expiry Section */}
+          <Stack mb="xl">
             <Switch
-              label="Enable End-to-End Encryption"
-              checked={form.values.useEncryption}
-              onChange={(event) =>
-                form.setFieldValue("useEncryption", event.currentTarget.checked)
-              }
+              label="Set Expiry Date"
+              checked={form.values.useExpiry}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                form.setFieldValue("useExpiry", checked);
+                if (!checked) {
+                  form.setFieldValue("notifyBeforeExpiry", false);
+                }
+              }}
               size="md"
-              color="green"
+              color="blue"
               onLabel={<Check size={14} />}
               offLabel={<X size={14} />}
             />
-          </Group>
 
-          {form.values.useEncryption && (
-            <>
-              <Alert color="blue" title="About End-to-End Encryption" mb="md">
-                <Text size="sm">
-                  Enabling encryption will protect your link content so only
-                  those with the encryption key can access the original URL. The
-                  key is <strong>never stored</strong> on our servers in plain
-                  text.
-                </Text>
-              </Alert>
-
-              <Group align="flex-end" mb="xl">
-                <PasswordInput
-                  label="Encryption Key"
-                  description="This key will be needed to decrypt the URL"
-                  placeholder="Enter a secure key"
-                  style={{ flexGrow: 1 }}
-                  leftSection={<KeyRound size={16} />}
-                  {...form.getInputProps("encryptionKey")}
+            {form.values.useExpiry && (
+              <>
+                <TextInput
+                  type="date"
+                  label="Expiry Date"
+                  {...form.getInputProps("expiryDate")}
+                  min={
+                    form.values.scheduled
+                      ? form.values.activationDate || getTodayDate()
+                      : getTodayDate()
+                  }
+                  required
                 />
-                <Button variant="outline" onClick={generateRandomKey}>
-                  Generate Key
-                </Button>
-              </Group>
-            </>
-          )}
+
+                <TextInput
+                  type="time"
+                  label="Expiry Time"
+                  {...form.getInputProps("expiryTime")}
+                  required
+                />
+
+                <Switch
+                  label="Notify Me Before Expiry"
+                  checked={form.values.notifyBeforeExpiry}
+                  onChange={(e) =>
+                    form.setFieldValue(
+                      "notifyBeforeExpiry",
+                      e.currentTarget.checked
+                    )
+                  }
+                  size="md"
+                  color="teal"
+                  onLabel={<Check size={14} />}
+                  offLabel={<X size={14} />}
+                />
+              </>
+            )}
+          </Stack>
 
           <Group justify="flex-end" mt="xl">
             <Button variant="default" onClick={() => navigate("/")}>

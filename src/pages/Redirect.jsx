@@ -1,164 +1,140 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { Container, Paper, Title, Text, Button, PasswordInput, Group, Alert, Loader } from '@mantine/core';
-import { useForm } from '@mantine/form';
-import { linkService } from '../services/linkService';
-import { links } from '../data/mockData';
-import { LinkIcon, AlertTriangle, KeyRound } from 'lucide-react';
+// import React, { useEffect, useState } from "react";
+// import { useParams, Link as RouterLink } from "react-router-dom";
+// import {
+//   Container,
+//   Paper,
+//   Title,
+//   Text,
+//   Button,
+//   Group,
+//   Alert,
+//   Loader,
+// } from "@mantine/core";
+// import { LinkIcon, AlertTriangle } from "lucide-react";
+// import { fetchRedirectInfo } from "../services/LinkService";
+
+// const Redirect = () => {
+//   const { shortCode } = useParams();
+//   const [loading, setLoading] = useState(true);
+//   const [errorReason, setErrorReason] = useState(null);
+
+//   useEffect(() => {
+//     console.log(shortCode);
+//     const handleRedirect = async () => {
+//       if (!shortCode) {
+//         setErrorReason("invalid_code");
+//         setLoading(false);
+//         return;
+//       }
+
+//       try {
+//         const result = await fetchRedirectInfo(shortCode);
+
+//         if (result.status === 302 && result.location) {
+//           // Successful redirect — send user to original URL
+//           window.location.href = result.location;
+//         } else {
+//           // Link not found, expired, or inactive (reason embedded in URL)
+//           const reasonMatch = result.location?.match(/reason=([^&]+)/);
+//           setErrorReason(reasonMatch ? reasonMatch[1] : "unknown");
+//           setLoading(false);
+//         }
+//       } catch (err) {
+//         console.error("Redirect error:", err);
+//         setErrorReason("server_error");
+//         setLoading(false);
+//       }
+//     };
+
+//     handleRedirect();
+//   }, [shortCode]);
+
+//   const getErrorMessage = (reason) => {
+//     switch (reason) {
+//       case "not_found":
+//         return "This link does not exist.";
+//       case "expired":
+//         return "This link has expired.";
+//       case "inactive":
+//         return "This link is currently inactive.";
+//       case "invalid_code":
+//         return "The provided code is invalid.";
+//       case "server_error":
+//         return "A server error occurred. Please try again.";
+//       default:
+//         return "An unknown error occurred.";
+//     }
+//   };
+
+//   if (loading) {
+//     return (
+//       <Container
+//         size={420}
+//         my={80}
+//         className="flex flex-col items-center justify-center"
+//       >
+//         <Loader size="xl" color="blue" />
+//         <Text mt="md" c="dimmed">
+//           Redirecting to your link...
+//         </Text>
+//       </Container>
+//     );
+//   }
+
+//   return (
+//     <Container size={420} my={60}>
+//       <Group justify="center" mb="lg">
+//         <LinkIcon size={32} color="#1890FF" />
+//         <Title order={1} ta="center" c="brand.6">
+//           ShortLink
+//         </Title>
+//       </Group>
+
+//       <Paper withBorder radius="md" p={30} mt={30} shadow="md">
+//         <Alert
+//           color="red"
+//           title="Link Error"
+//           icon={<AlertTriangle size={18} />}
+//           mb="md"
+//         >
+//           {getErrorMessage(errorReason)}
+//         </Alert>
+
+//         <Text size="sm" mb="xl" ta="center">
+//           You can go back to the homepage and try again.
+//         </Text>
+
+//         <Button component={RouterLink} to="/" fullWidth>
+//           Go to Homepage
+//         </Button>
+//       </Paper>
+//     </Container>
+//   );
+// };
+
+// export default Redirect;
+
+import React, { useEffect } from "react";
+import { useParams } from "react-router-dom";
 
 const Redirect = () => {
-  const { code } = useParams();
-  const [link, setLink] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [decrypting, setDecrypting] = useState(false);
-
-  const form = useForm({
-    initialValues: {
-      encryptionKey: '',
-    },
-    validate: {
-      encryptionKey: (value) => (!value ? 'Encryption key is required' : null),
-    },
-  });
+  const { shortCode } = useParams();
 
   useEffect(() => {
-    if (!code) {
-      setError('Invalid link');
-      setLoading(false);
-      return;
+    if (shortCode) {
+      window.location.href = `http://localhost:8080/${shortCode}`;
     }
+  }, [shortCode]);
 
-    try {
-      const foundLink = links.find((link) => link.shortCode === code);
-
-      if (!foundLink) {
-        setError('This link does not exist or has expired');
-        setLoading(false);
-        return;
-      }
-
-      setLink(foundLink);
-
-      if (!foundLink.isEncrypted) {
-        linkService.incrementClicks(foundLink.shortCode);
-        window.location.href = foundLink.originalUrl;
-      } else {
-        setLoading(false);
-      }
-    } catch (err) {
-      console.error('Error fetching link:', err);
-      setError('An error occurred while retrieving this link');
-      setLoading(false);
-    }
-  }, [code]);
-
-  const handleDecrypt = (values) => {
-    if (!link) return;
-
-    try {
-      setDecrypting(true);
-      setError(null);
-
-      // ✅ Pass user-entered key here
-      const decryptedUrl = linkService.decryptUrl(link.originalUrl, values.encryptionKey);
-
-      if (!decryptedUrl) {
-        setError('Invalid encryption key');
-        setDecrypting(false);
-        return;
-      }
-
-      linkService.incrementClicks(link.shortCode);
-      window.location.href = decryptedUrl;
-    } catch (err) {
-      console.error('Decryption error:', err);
-      setError('Invalid encryption key');
-      setDecrypting(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <Container size={420} my={40} className="flex flex-col items-center justify-center">
-        <Loader size="lg" />
-        <Text mt="md">Redirecting...</Text>
-      </Container>
-    );
-  }
-
-  if (error) {
-    return (
-      <Container size={420} my={40}>
-        <Group justify="center" mb="lg">
-          <LinkIcon size={32} color="#1890FF" />
-          <Title order={1} ta="center" c="brand.6">
-            ShortLink
-          </Title>
-        </Group>
-
-        <Paper withBorder radius="md" p={30} mt={30} shadow="md">
-          <Alert color="red" title="Link Error" icon={<AlertTriangle size={16} />} mb="md">
-            {error}
-          </Alert>
-
-          <Text size="sm" mb="xl" ta="center">
-            This link may have expired, been removed, or never existed.
-          </Text>
-
-          <Button component={Link} to="/" fullWidth>
-            Go to Homepage
-          </Button>
-        </Paper>
-      </Container>
-    );
-  }
-
-  if (link?.isEncrypted) {
-    return (
-      <Container size={420} my={40}>
-        <Group justify="center" mb="lg">
-          <LinkIcon size={32} color="#1890FF" />
-          <Title order={1} ta="center" c="brand.6">
-            ShortLink
-          </Title>
-        </Group>
-
-        <Paper withBorder radius="md" p={30} mt={30} shadow="md">
-          <Title order={3} ta="center" mb="md">
-            Encrypted Link
-          </Title>
-
-          <Alert color="blue" title="Encryption Key Required" mb="xl">
-            This link is encrypted and requires a key to access. If you received this link from someone, they should have provided you with the encryption key.
-          </Alert>
-
-          <form onSubmit={form.onSubmit(handleDecrypt)}>
-            <PasswordInput
-              label="Encryption Key"
-              placeholder="Enter the encryption key"
-              required
-              mb="md"
-              leftSection={<KeyRound size={16} />}
-              {...form.getInputProps('encryptionKey')}
-            />
-
-            {error && (
-              <Alert color="red" mb="md">
-                {error}
-              </Alert>
-            )}
-
-            <Button fullWidth mt="md" type="submit" loading={decrypting}>
-              Access Link
-            </Button>
-          </form>
-        </Paper>
-      </Container>
-    );
-  }
-
-  return null;
+  return (
+    <div style={{ textAlign: "center", marginTop: "100px" }}>
+      <h2>Redirecting...</h2>
+      <p>
+        If you are not redirected automatically,{" "}
+        <a href={`http://localhost:8080/${shortCode}`}>click here</a>.
+      </p>
+    </div>
+  );
 };
 
 export default Redirect;

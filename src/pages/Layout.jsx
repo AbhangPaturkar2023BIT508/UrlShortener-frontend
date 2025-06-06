@@ -47,7 +47,6 @@ const Layout = () => {
 
   const handleLogout = () => {
     logout();
-    localStorage.removeItem("user");
     navigate("/login");
   };
 
@@ -82,7 +81,12 @@ const Layout = () => {
               hiddenFrom="sm"
               size="sm"
             />
-            <Group>
+            <Group
+              style={{ cursor: "pointer" }}
+              onClick={() => {
+                navigate("/");
+              }}
+            >
               <LinkIcon size={24} color="#228be6" />
               <Text fw={700} size="lg" c="blue.7">
                 ShortLink

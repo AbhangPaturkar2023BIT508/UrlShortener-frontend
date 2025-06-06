@@ -16,9 +16,14 @@ import { LinkIcon } from "lucide-react";
 import { loginUser } from "../services/UserService"; // your login API call
 import { notifications } from "@mantine/notifications";
 
+import ResetPassword from "./ResetPassword";
+import { useAuth } from "../context/AuthContext";
+
 const Login = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const form = useForm({
     initialValues: {
@@ -45,11 +50,11 @@ const Login = () => {
           autoClose: 3000,
         });
 
-        // Save token or user data here if needed, e.g. localStorage.setItem('token', response.token);
+        localStorage.setItem("user", JSON.stringify(response));
+        login(response); // 👈 Context update
 
         setTimeout(() => {
-          localStorage.setItem("user", JSON.stringify(response));
-          navigate("/"); // redirect wherever after login
+          navigate("/"); // redirect after login
         }, 3000);
       })
       .catch((error) => {
@@ -108,6 +113,15 @@ const Login = () => {
             Register
           </Anchor>
         </Text>
+        <Text size="xs" ta="center" mt="md">
+          <Anchor
+            onClick={() => setForgotOpen(true)}
+            style={{ cursor: "pointer" }}
+          >
+            Forgot Password?
+          </Anchor>
+        </Text>
+        <ResetPassword opened={forgotOpen} close={() => setForgotOpen(false)} />
       </Paper>
     </Container>
   );

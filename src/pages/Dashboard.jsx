@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Container,
   Title,
@@ -12,8 +12,9 @@ import {
   Tooltip,
   Modal,
   SimpleGrid,
-  Center,
   Stack,
+  Pagination,
+  Tabs,
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import {
@@ -25,29 +26,59 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { useAuth } from "../context/AuthContext";
-import { linkService } from "../services/linkService";
 import { notifications } from "@mantine/notifications";
+import { deleteLink, getLinks } from "../services/LinkService";
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const user = JSON.parse(localStorage.getItem("user"));
   const navigate = useNavigate();
 
-  // ✅ Fix the state setup and fallback to empty array
-  const [links, setLinks] = useState(() =>
-    user ? linkService.getUserLinks(user.id) : []
-  );
+  const [links, setLinks] = useState([]);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [selectedLink, setSelectedLink] = useState(null);
+  const [activePage, setActivePage] = useState(1);
+  const [inactivePage, setInactivePage] = useState(1);
+  const [screenSize, setScreenSize] = useState("large");
 
-  const handleDeleteLink = (id) => {
-    const success = linkService.deleteLink(id);
-    if (success) {
+  useEffect(() => {
+    const handleResize = () => {
+      const width = window.innerWidth;
+      if (width < 768) setScreenSize("small");
+      else if (width < 1024) setScreenSize("medium");
+      else setScreenSize("large");
+    };
+    window.addEventListener("resize", handleResize);
+    handleResize();
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      getLinks(user.id)
+        .then((res) => {
+          const sortedLinks = res.sort(
+            (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+          );
+          setLinks(res);
+        })
+        .catch((err) => console.log(err));
+    }
+  }, []);
+
+  const handleDeleteLink = async (id) => {
+    try {
+      await deleteLink(id);
       setLinks((prevLinks) => prevLinks.filter((link) => link.id !== id));
       notifications.show({
-        title: "Link deleted",
+        title: "Link Deleted",
         message: "Your link has been successfully deleted",
         color: "green",
+      });
+    } catch (error) {
+      notifications.show({
+        title: "Delete failed",
+        message: error.message || "Could not delete the link",
+        color: "red",
       });
     }
   };
@@ -57,12 +88,144 @@ const Dashboard = () => {
     setQrModalOpen(true);
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "Never";
-    return new Date(dateString).toLocaleDateString();
+  const formatDate = (isoString) => {
+    const date = new Date(isoString);
+    return date.toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
   };
 
-  const getFullShortUrl = (code) => `${window.location.origin}/r/${code}`;
+  const getTimeAgo = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    const intervals = {
+      year: 31536000,
+      month: 2592000,
+      week: 604800,
+      day: 86400,
+      hour: 3600,
+      minute: 60,
+    };
+    for (let [unit, secondsPerUnit] of Object.entries(intervals)) {
+      const count = Math.floor(seconds / secondsPerUnit);
+      if (count > 0) return `${count} ${unit}${count > 1 ? "s" : ""} ago`;
+    }
+    return "Just now";
+  };
+
+  const getFullShortUrl = (code) => `${window.location.origin}/${code}`;
+
+  const itemsPerPage =
+    screenSize === "small" ? 3 : screenSize === "medium" ? 4 : 6;
+
+  const activeLinks = links.filter((link) => link.active);
+  const inactiveLinks = links.filter((link) => !link.active);
+
+  const paginatedActiveLinks = activeLinks.slice(
+    (activePage - 1) * itemsPerPage,
+    activePage * itemsPerPage
+  );
+  const paginatedInactiveLinks = inactiveLinks.slice(
+    (inactivePage - 1) * itemsPerPage,
+    inactivePage * itemsPerPage
+  );
+
+  const renderLinkCard = (link) => (
+    <Card key={link.id} withBorder shadow="sm" radius="md" p="md">
+      <Card.Section withBorder inheritPadding py="xs">
+        <Group justify="space-between">
+          <div>
+            <Text fw={500} size="lg" lineClamp={1}>
+              {link.customCode}
+            </Text>
+            <Text size="xs" c="dimmed" lineClamp={1}>
+              {getFullShortUrl(link.customCode)}
+            </Text>
+          </div>
+          <Group>
+            <CopyButton value={getFullShortUrl(link.customCode)}>
+              {({ copied, copy }) => (
+                <Tooltip
+                  label={copied ? "Copied" : "Copy"}
+                  withArrow
+                  position="top"
+                >
+                  <ActionIcon color={copied ? "teal" : "gray"} onClick={copy}>
+                    <Copy size={16} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+            </CopyButton>
+            <Tooltip label="Generate QR Code" withArrow position="top">
+              <ActionIcon onClick={() => openQrModal(link)}>
+                <QrCode size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="Delete" withArrow position="top">
+              <ActionIcon color="red" onClick={() => handleDeleteLink(link.id)}>
+                <Trash size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Group>
+      </Card.Section>
+
+      <Group mt="md" mb="xs" direction="column" spacing={4}>
+        <Text
+          size="sm"
+          lineClamp={2}
+          component="a"
+          href={link.originalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ textDecoration: "underline" }}
+        >
+          {link.originalUrl}
+        </Text>
+        <Text size="xs" color="dimmed" italic="true">
+          Created: {getTimeAgo(link.createdAt)}
+        </Text>
+      </Group>
+
+      <Group justify="space-between" mt="md">
+        <Badge color={link.active ? "green" : "gray"}>
+          {link.active ? "Active" : "In-active"}
+        </Badge>
+        <Badge color="blue">{link.clicks} clicks</Badge>
+      </Group>
+
+      <Group mt="md" spacing="xs">
+        <Calendar size={14} />
+        <Text size="xs">
+          Activate:{" "}
+          {link.activateAt
+            ? formatDate(link.activateAt)
+            : formatDate(link.createdAt)}
+        </Text>
+      </Group>
+
+      <Group mt="xs" spacing="xs">
+        <Clock size={14} />
+        <Text size="xs">
+          Expires: {link.expiresAt ? formatDate(link.expiresAt) : "NA"}
+        </Text>
+      </Group>
+
+      <Button
+        fullWidth
+        variant="light"
+        mt="md"
+        leftSection={<ExternalLink size={14} />}
+        component="a"
+        href={getFullShortUrl(link.customCode)}
+        target="_blank"
+      >
+        Open Link
+      </Button>
+    </Card>
+  );
 
   return (
     <Container size="lg" py="xl">
@@ -81,92 +244,38 @@ const Dashboard = () => {
           </Stack>
         </Card>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
-          {links.map((link) => (
-            <Card key={link.id} withBorder shadow="sm" radius="md" p="md">
-              <Card.Section withBorder inheritPadding py="xs">
-                <Group justify="space-between">
-                  <div>
-                    <Text fw={500} size="lg" lineClamp={1}>
-                      {link.shortCode}
-                    </Text>
-                    <Text size="xs" c="dimmed" lineClamp={1}>
-                      {getFullShortUrl(link.shortCode)}
-                    </Text>
-                  </div>
-                  <Group>
-                    <CopyButton value={getFullShortUrl(link.shortCode)}>
-                      {({ copied, copy }) => (
-                        <Tooltip
-                          label={copied ? "Copied" : "Copy"}
-                          withArrow
-                          position="top"
-                        >
-                          <ActionIcon
-                            color={copied ? "teal" : "gray"}
-                            onClick={copy}
-                          >
-                            <Copy size={16} />
-                          </ActionIcon>
-                        </Tooltip>
-                      )}
-                    </CopyButton>
-                    <Tooltip label="Generate QR Code" withArrow position="top">
-                      <ActionIcon onClick={() => openQrModal(link)}>
-                        <QrCode size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                    <Tooltip label="Delete" withArrow position="top">
-                      <ActionIcon
-                        color="red"
-                        onClick={() => handleDeleteLink(link.id)}
-                      >
-                        <Trash size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </Group>
-                </Group>
-              </Card.Section>
+        <Tabs defaultValue="active">
+          <Tabs.List>
+            <Tabs.Tab value="active">Active Links</Tabs.Tab>
+            <Tabs.Tab value="inactive">Inactive Links</Tabs.Tab>
+          </Tabs.List>
 
-              <Group mt="md" mb="xs">
-                <Text size="sm" lineClamp={2}>
-                  {link.originalUrl}
-                </Text>
-              </Group>
+          <Tabs.Panel value="active" pt="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+              {paginatedActiveLinks.map(renderLinkCard)}
+            </SimpleGrid>
+            <Group justify="flex-end" mt="md">
+              <Pagination
+                total={Math.ceil(activeLinks.length / itemsPerPage)}
+                value={activePage}
+                onChange={setActivePage}
+              />
+            </Group>
+          </Tabs.Panel>
 
-              <Group justify="space-between" mt="md">
-                <Badge color={link.isEncrypted ? "green" : "gray"}>
-                  {link.isEncrypted ? "Encrypted" : "Not Encrypted"}
-                </Badge>
-                <Badge color="blue">{link.clicks} clicks</Badge>
-              </Group>
-
-              <Group mt="md" spacing="xs">
-                <Calendar size={14} />
-                <Text size="xs">Created: {formatDate(link.createdAt)}</Text>
-              </Group>
-
-              {link.expiresAt && (
-                <Group mt="xs" spacing="xs">
-                  <Clock size={14} />
-                  <Text size="xs">Expires: {formatDate(link.expiresAt)}</Text>
-                </Group>
-              )}
-
-              <Button
-                fullWidth
-                variant="light"
-                mt="md"
-                leftSection={<ExternalLink size={14} />}
-                component="a"
-                href={getFullShortUrl(link.shortCode)}
-                target="_blank"
-              >
-                Open Link
-              </Button>
-            </Card>
-          ))}
-        </SimpleGrid>
+          <Tabs.Panel value="inactive" pt="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+              {paginatedInactiveLinks.map(renderLinkCard)}
+            </SimpleGrid>
+            <Group justify="flex-end" mt="md">
+              <Pagination
+                total={Math.ceil(inactiveLinks.length / itemsPerPage)}
+                value={inactivePage}
+                onChange={setInactivePage}
+              />
+            </Group>
+          </Tabs.Panel>
+        </Tabs>
       )}
 
       <Modal
@@ -178,17 +287,17 @@ const Dashboard = () => {
         {selectedLink && (
           <Stack align="center" spacing="md">
             <QRCodeSVG
-              value={getFullShortUrl(selectedLink.shortCode)}
+              value={getFullShortUrl(selectedLink.customCode)}
               size={200}
               bgColor="#ffffff"
               fgColor="#000000"
               level="L"
             />
-            <Text fw={500}>{selectedLink.shortCode}</Text>
+            <Text fw={500}>{selectedLink.customCode}</Text>
             <Text size="sm" c="dimmed">
-              {getFullShortUrl(selectedLink.shortCode)}
+              {getFullShortUrl(selectedLink.customCode)}
             </Text>
-            <CopyButton value={getFullShortUrl(selectedLink.shortCode)}>
+            <CopyButton value={getFullShortUrl(selectedLink.customCode)}>
               {({ copied, copy }) => (
                 <Button
                   onClick={copy}

@@ -1,65 +1,50 @@
-import CryptoJS from "crypto-js";
-import { links } from "../data/mockData";
+import axios from "axios";
 
-const ENCRYPTION_KEY = "your-secret-key"; // In production, use environment variables
+const baseUrl = "http://localhost:8080/link";
 
-export const linkService = {
-  encryptUrl: (url, encryptionKey = ENCRYPTION_KEY) => {
-    return CryptoJS.AES.encrypt(url, encryptionKey).toString();
-  },
+export const checkCodeExists = async (code) => {
+  return axios
+    .get(`${baseUrl}/checkCodeExists/${code}`)
+    .then((res) => res.data)
+    .catch((err) => {
+      throw err;
+    });
+};
 
-  decryptUrl: (encryptedUrl, encryptionKey = ENCRYPTION_KEY) => {
-    const bytes = CryptoJS.AES.decrypt(encryptedUrl, encryptionKey);
-    return bytes.toString(CryptoJS.enc.Utf8);
-  },
+export const createLink = async (link) => {
+  return axios
+    .post(`${baseUrl}/create`, link)
+    .then((res) => res.data)
+    .catch((err) => {
+      throw err;
+    });
+};
 
-  generateShortCode: () => {
-    return Math.random().toString(36).substring(2, 8);
-  },
+export const getLinks = async (userId) => {
+  return axios
+    .get(`${baseUrl}/getAll`, {
+      params: { userId }, // 👈 This puts userId in the query string
+    })
+    .then((res) => res.data)
+    .catch((err) => {
+      throw err;
+    });
+};
 
-  createLink: (
-    userId,
-    originalUrl,
-    p0, // unused param, kept for compatibility
-    expiresAt,
-    useEncryption, // unused param, kept for compatibility
-    p1, // unused param, kept for compatibility
-    expiresAtOverride // nullable expiration date param, unused here (you had duplicate names)
-  ) => {
-    const shortCode = linkService.generateShortCode();
-    const encryptedUrl = linkService.encryptUrl(originalUrl);
+export const deleteLink = async (linkId) => {
+  return axios
+    .delete(`${baseUrl}/delete/${linkId}`) // Pass id in URL path
+    .then((res) => res.data)
+    .catch((err) => {
+      throw err;
+    });
+};
 
-    const newLink = {
-      id: Math.random().toString(36).substr(2, 9),
-      userId,
-      originalUrl,
-      shortCode,
-      encryptedUrl,
-      createdAt: new Date().toISOString(),
-      expiresAt, // Using the passed expiresAt param
-      clicks: 0,
-      isActive: true,
-    };
-
-    links.push(newLink);
-    return newLink;
-  },
-
-  getUserLinks: (userId) => {
-    return links.filter((link) => link.userId === userId);
-  },
-
-  deleteLink: (id) => {
-    const index = links.findIndex((link) => link.id === id);
-    if (index !== -1) {
-      links.splice(index, 1);
-    }
-  },
-
-  incrementClicks: (shortCode) => {
-    const link = links.find((link) => link.shortCode === shortCode);
-    if (link) {
-      link.clicks += 1;
-    }
-  },
+export const fetchRedirectInfo = async (code) => {
+  return axios
+    .get(`http://localhost:8080/${code}`)
+    .then((res) => res.data)
+    .catch((err) => {
+      throw err;
+    });
 };
