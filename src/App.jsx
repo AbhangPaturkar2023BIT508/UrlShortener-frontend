@@ -68,7 +68,7 @@ function App() {
                 </Route>
 
                 {/* Redirect and invalid pages - accessible without auth */}
-                <Route path="/:shortCode" element={<Redirect />} />
+                <Route path="/r/:shortCode" element={<Redirect />} />
                 <Route path="/invalid" element={<Invalid />} />
 
                 {/* Private routes - require auth */}
