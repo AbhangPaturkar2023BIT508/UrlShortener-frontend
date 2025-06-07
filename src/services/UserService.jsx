@@ -1,6 +1,9 @@
 import axios from "axios";
 
-const baseUrl = "http://localhost:8080/users";
+// const baseUrl = "http://localhost:8080/users";
+
+
+const baseUrl = "https://shortlink-backend-sej7.onrender.com/users";
 
 export const registerUser = async (user) => {
   return axios

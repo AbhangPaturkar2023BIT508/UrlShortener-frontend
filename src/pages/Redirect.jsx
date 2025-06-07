@@ -1,5 +1,3 @@
-
-
 import React, { useEffect } from "react";
 import { useParams } from "react-router-dom";
 
@@ -8,7 +6,8 @@ const Redirect = () => {
 
   useEffect(() => {
     if (shortCode) {
-      window.location.href = `http://localhost:8080/r/${shortCode}`;
+      // window.location.href = `http://localhost:8080/r/${shortCode}`;
+      window.location.href = `https://shortlink-backend-sej7.onrender.com/r/${shortCode}`;
     }
   }, [shortCode]);
 
@@ -17,7 +16,10 @@ const Redirect = () => {
       <h2>Redirecting...</h2>
       <p>
         If you are not redirected automatically,{" "}
-        <a href={`http://localhost:8080/r/${shortCode}`}>click here</a>.
+        <a href={`https://shortlink-backend-sej7.onrender.com/r/${shortCode}`}>
+          click here
+        </a>
+        .
       </p>
     </div>
   );

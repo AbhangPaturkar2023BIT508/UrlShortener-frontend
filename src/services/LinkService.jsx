@@ -1,6 +1,8 @@
 import axios from "axios";
 
-const baseUrl = "http://localhost:8080/link";
+// const baseUrl = "http://localhost:8080/link";
+
+const baseUrl = "https://shortlink-backend-sej7.onrender.com/link";
 
 export const checkCodeExists = async (code) => {
   return axios
@@ -42,7 +44,7 @@ export const deleteLink = async (linkId) => {
 
 export const fetchRedirectInfo = async (code) => {
   return axios
-    .get(`http://localhost:8080/${code}`)
+    .get(`https://shortlink-backend-sej7.onrender.com/r/${code}`)
     .then((res) => res.data)
     .catch((err) => {
       throw err;

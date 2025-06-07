@@ -59,7 +59,7 @@ const Dashboard = () => {
           const sortedLinks = res.sort(
             (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
           );
-          setLinks(res);
+          setLinks(sortedLinks);
         })
         .catch((err) => console.log(err));
     }
@@ -115,7 +115,7 @@ const Dashboard = () => {
     return "Just now";
   };
 
-  const getFullShortUrl = (code) => `${window.location.origin}/${code}`;
+  const getFullShortUrl = (code) => `${window.location.origin}/r/${code}`;
 
   const itemsPerPage =
     screenSize === "small" ? 3 : screenSize === "medium" ? 4 : 6;
@@ -175,12 +175,18 @@ const Dashboard = () => {
       <Group mt="md" mb="xs" direction="column" spacing={4}>
         <Text
           size="sm"
-          lineClamp={2}
           component="a"
           href={link.originalUrl}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ textDecoration: "underline" }}
+          style={{
+            color: "#1c7ed6",
+            textDecoration: "underline",
+            display: "block",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
         >
           {link.originalUrl}
         </Text>
